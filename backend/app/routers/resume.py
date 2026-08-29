@@ -605,7 +605,6 @@ async def upload_resume(
                 e
             )
 
-
 # ======================================================
 # RESUME HISTORY
 # ======================================================
@@ -627,8 +626,7 @@ def get_resume_history(
         resumes = (
             db.query(Resume)
             .filter(
-                Resume.user_id
-                == current_user.id
+                Resume.user_id == current_user.id
             )
             .order_by(
                 Resume.uploaded_at.desc()
@@ -636,33 +634,51 @@ def get_resume_history(
             .all()
         )
 
+        history = []
+
+        for resume in resumes:
+
+            # Get ATS analysis
+            analysis = (
+                db.query(ATSAnalysis)
+                .filter(
+                    ATSAnalysis.resume_id == resume.id
+                )
+                .first()
+            )
+
+            ats_score = (
+                analysis.ats_score
+                if analysis
+                else None
+            )
+
+            history.append({
+
+                "resume_id":
+                    resume.id,
+
+                "file_name":
+                    resume.file_name,
+
+                "uploaded_at":
+                    (
+                        resume.uploaded_at.isoformat()
+                        if resume.uploaded_at
+                        else None
+                    ),
+
+                "ats_score":
+                    ats_score
+            })
+
         return {
 
             "message":
                 "Resume history retrieved successfully",
 
-            "user_id":
-                current_user.id,
-
-            "resumes": [
-
-                {
-                    "resume_id":
-                        resume.id,
-
-                    "file_name":
-                        resume.file_name,
-
-                    "uploaded_at":
-                        (
-                            resume.uploaded_at.isoformat()
-                            if resume.uploaded_at
-                            else None
-                        )
-                }
-
-                for resume in resumes
-            ]
+            "resumes":
+                history
         }
 
     except Exception as e:
@@ -678,7 +694,6 @@ def get_resume_history(
                 "Unable to retrieve resume history."
             )
         )
-
 
 # ======================================================
 # RESUME DETAILS
