@@ -29,16 +29,15 @@ app = FastAPI(
 # ============================================================
 # CORS CONFIGURATION
 # ============================================================
-
 ALLOWED_ORIGINS = [
-    # Local development
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:5174",
     "http://127.0.0.1:5174",
 
-    # Vercel production frontend
+    # Vercel deployments
     "https://ai-resume-analyzer-zeta-mocha.vercel.app",
+    "https://ai-resume-analyzer-kvoyna1dl-resume-iq2.vercel.app",
 ]
 
 
