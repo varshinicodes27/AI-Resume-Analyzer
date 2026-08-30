@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 
-# Load backend/.env explicitly
+# Load .env explicitly for local development
 BASE_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(BASE_DIR / ".env")
 
@@ -18,7 +18,11 @@ if not DATABASE_URL:
 
 engine = create_engine(
     DATABASE_URL,
-    pool_pre_ping=True
+    pool_pre_ping=True,
+    pool_recycle=300,
+    connect_args={
+        "ssl": {}
+    }
 )
 
 SessionLocal = sessionmaker(
