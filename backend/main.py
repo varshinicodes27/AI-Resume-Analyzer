@@ -8,32 +8,60 @@ from app.models.user import User
 from app.models.resume import Resume
 from app.models.ats_analysis import ATSAnalysis
 
+
+# ============================================================
+# DATABASE INITIALIZATION
+# ============================================================
+
 Base.metadata.create_all(bind=engine)
+
+
+# ============================================================
+# FASTAPI APP
+# ============================================================
 
 app = FastAPI(
     title="ResumeIQ API",
     version="1.0.0"
 )
 
+
+# ============================================================
+# CORS CONFIGURATION
+# ============================================================
+
+ALLOWED_ORIGINS = [
+    # Local development
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+
+    # Vercel production frontend
+    "https://ai-resume-analyzer-zeta-mocha.vercel.app",
+]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-
-        # Vercel production frontend
-        "https://ai-resume-analyzer-zeta-mocha.vercel.app",
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
+# ============================================================
+# ROUTERS
+# ============================================================
+
 app.include_router(auth_router)
 app.include_router(resume_router)
 
+
+# ============================================================
+# HEALTH CHECK
+# ============================================================
 
 @app.get("/")
 def home():
