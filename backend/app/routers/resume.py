@@ -33,7 +33,7 @@ from app.dependencies.auth import get_current_user
 
 
 # ======================================================
-# AI
+# AI / RESUME ANALYSIS
 # ======================================================
 
 from app.ai.ats_engine import calculate_section_scores
@@ -43,9 +43,14 @@ from app.ai.job_matcher import (
     calculate_job_match
 )
 
-from app.utils.pdf_reader import extract_text_from_pdf
-
 from app.ai.ai_resume_parser import parse_resume_with_ai
+
+
+# ======================================================
+# PDF
+# ======================================================
+
+from app.utils.pdf_reader import extract_text_from_pdf
 
 
 # ======================================================
@@ -63,7 +68,6 @@ router = APIRouter(
 # ======================================================
 
 class JobDescriptionRequest(BaseModel):
-
     job_description: str
 
 
@@ -77,9 +81,6 @@ os.makedirs(
     UPLOAD_FOLDER,
     exist_ok=True
 )
-
-
-# Maximum resume size: 5 MB
 
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
@@ -103,20 +104,16 @@ async def upload_resume(
 ):
 
     # --------------------------------------------------
-    # 1. Validate file
+    # 1. Validate uploaded file
     # --------------------------------------------------
 
     if not file.filename:
-
         raise HTTPException(
             status_code=400,
             detail="No file was selected."
         )
 
-    # Only PDF files
-
     if not file.filename.lower().endswith(".pdf"):
-
         raise HTTPException(
             status_code=400,
             detail="Only PDF resume files are supported."
@@ -131,14 +128,12 @@ async def upload_resume(
         file_content = await file.read()
 
         if not file_content:
-
             raise HTTPException(
                 status_code=400,
                 detail="The uploaded PDF is empty."
             )
 
         if len(file_content) > MAX_FILE_SIZE:
-
             raise HTTPException(
                 status_code=413,
                 detail=(
@@ -148,14 +143,13 @@ async def upload_resume(
             )
 
     except HTTPException:
-
         raise
 
     except Exception as e:
 
         print(
             "File reading error:",
-            e
+            repr(e)
         )
 
         raise HTTPException(
@@ -177,7 +171,7 @@ async def upload_resume(
     )
 
     # --------------------------------------------------
-    # 4. Save temporary uploaded PDF
+    # 4. Save temporary PDF
     # --------------------------------------------------
 
     try:
@@ -195,7 +189,7 @@ async def upload_resume(
 
         print(
             "File save error:",
-            e
+            repr(e)
         )
 
         raise HTTPException(
@@ -204,7 +198,7 @@ async def upload_resume(
         )
 
     # --------------------------------------------------
-    # Everything below this point needs cleanup
+    # Everything below requires cleanup
     # --------------------------------------------------
 
     try:
@@ -223,7 +217,7 @@ async def upload_resume(
 
             print(
                 "PDF extraction error:",
-                e
+                repr(e)
             )
 
             raise HTTPException(
@@ -251,8 +245,6 @@ async def upload_resume(
                 )
             )
 
-        # Prevent extremely tiny documents
-
         if len(extracted_text.strip()) < 50:
 
             raise HTTPException(
@@ -264,7 +256,7 @@ async def upload_resume(
             )
 
         # ==================================================
-        # 7. SAVE RESUME IN DATABASE
+        # 7. SAVE RESUME
         # ==================================================
 
         try:
@@ -276,15 +268,9 @@ async def upload_resume(
                 extracted_text=extracted_text
             )
 
-            db.add(
-                resume
-            )
-
+            db.add(resume)
             db.commit()
-
-            db.refresh(
-                resume
-            )
+            db.refresh(resume)
 
             print(
                 "Resume saved successfully."
@@ -306,7 +292,7 @@ async def upload_resume(
 
             print(
                 "Resume database error:",
-                e
+                repr(e)
             )
 
             raise HTTPException(
@@ -328,7 +314,7 @@ async def upload_resume(
 
             print(
                 "AI parsing error:",
-                e
+                repr(e)
             )
 
             raise HTTPException(
@@ -340,7 +326,7 @@ async def upload_resume(
             )
 
         # ==================================================
-        # 9. Validate AI response
+        # 9. VALIDATE AI RESPONSE
         # ==================================================
 
         if not isinstance(
@@ -357,7 +343,7 @@ async def upload_resume(
             )
 
         # ==================================================
-        # 10. Get parsed sections safely
+        # 10. GET PARSED SECTIONS
         # ==================================================
 
         candidate = parsed_data.get(
@@ -391,56 +377,47 @@ async def upload_resume(
         )
 
         # --------------------------------------------------
-        # Make sure arrays are actually arrays
+        # Ensure correct data types
         # --------------------------------------------------
+
+        candidate = (
+            candidate
+            if isinstance(candidate, dict)
+            else {}
+        )
 
         education = (
             education
-            if isinstance(
-                education,
-                list
-            )
+            if isinstance(education, list)
             else []
         )
 
         projects = (
             projects
-            if isinstance(
-                projects,
-                list
-            )
+            if isinstance(projects, list)
             else []
         )
 
         skills = (
             skills
-            if isinstance(
-                skills,
-                list
-            )
+            if isinstance(skills, list)
             else []
         )
 
         experience = (
             experience
-            if isinstance(
-                experience,
-                list
-            )
+            if isinstance(experience, list)
             else []
         )
 
         certifications = (
             certifications
-            if isinstance(
-                certifications,
-                list
-            )
+            if isinstance(certifications, list)
             else []
         )
 
         # ==================================================
-        # 11. Calculate ATS report
+        # 11. CALCULATE ATS REPORT
         # ==================================================
 
         try:
@@ -453,7 +430,7 @@ async def upload_resume(
 
             print(
                 "ATS calculation error:",
-                e
+                repr(e)
             )
 
             raise HTTPException(
@@ -462,12 +439,10 @@ async def upload_resume(
             )
 
         # ==================================================
-        # 13. SAVE ATS ANALYSIS IN DATABASE
+        # 12. SAVE ATS ANALYSIS
         # ==================================================
 
         try:
-
-            # Get overall ATS score safely
 
             overall_score = float(
                 ats_report.get(
@@ -476,17 +451,17 @@ async def upload_resume(
                 )
             )
 
-            # Get section scores
-
-            section_scores = (
-                ats_report.get(
-                    "section_scores",
-                    {}
-                )
+            section_scores = ats_report.get(
+                "section_scores",
+                {}
             )
 
-            # Convert section scores dictionary
-            # into JSON text for MySQL
+            if not isinstance(
+                section_scores,
+                dict
+            ):
+
+                section_scores = {}
 
             section_scores_json = json.dumps(
                 section_scores
@@ -528,18 +503,16 @@ async def upload_resume(
 
             print(
                 "ATS analysis database error:",
-                e
+                repr(e)
             )
 
             raise HTTPException(
                 status_code=500,
-                detail=(
-                    "Unable to save ATS analysis."
-                )
+                detail="Unable to save ATS analysis."
             )
 
         # ==================================================
-        # 14. RETURN COMPLETE ANALYSIS
+        # 13. RETURN COMPLETE ANALYSIS
         # ==================================================
 
         return {
@@ -581,7 +554,7 @@ async def upload_resume(
     finally:
 
         # ==================================================
-        # 15. Cleanup temporary PDF
+        # 14. CLEANUP TEMPORARY PDF
         # ==================================================
 
         try:
@@ -602,8 +575,9 @@ async def upload_resume(
 
             print(
                 "Temporary file cleanup failed:",
-                e
+                repr(e)
             )
+
 
 # ======================================================
 # RESUME HISTORY
@@ -638,7 +612,6 @@ def get_resume_history(
 
         for resume in resumes:
 
-            # Get ATS analysis
             analysis = (
                 db.query(ATSAnalysis)
                 .filter(
@@ -685,15 +658,14 @@ def get_resume_history(
 
         print(
             "Resume history error:",
-            e
+            repr(e)
         )
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Unable to retrieve resume history."
-            )
+            detail="Unable to retrieve resume history."
         )
+
 
 # ======================================================
 # RESUME DETAILS
@@ -719,14 +691,10 @@ def get_resume_details(
             db.query(Resume)
             .filter(
                 Resume.id == resume_id,
-                Resume.user_id
-                == current_user.id
+                Resume.user_id == current_user.id
             )
             .first()
         )
-
-        # Resume doesn't exist OR
-        # doesn't belong to current user
 
         if not resume:
 
@@ -767,21 +735,18 @@ def get_resume_details(
         }
 
     except HTTPException:
-
         raise
 
     except Exception as e:
 
         print(
             "Resume details error:",
-            e
+            repr(e)
         )
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Unable to retrieve resume details."
-            )
+            detail="Unable to retrieve resume details."
         )
 
 
@@ -806,15 +771,14 @@ def get_resume_analysis(
     try:
 
         # --------------------------------------------------
-        # Find resume belonging to logged-in user
+        # Find user's resume
         # --------------------------------------------------
 
         resume = (
             db.query(Resume)
             .filter(
                 Resume.id == resume_id,
-                Resume.user_id
-                == current_user.id
+                Resume.user_id == current_user.id
             )
             .first()
         )
@@ -833,8 +797,7 @@ def get_resume_analysis(
         analysis = (
             db.query(ATSAnalysis)
             .filter(
-                ATSAnalysis.resume_id
-                == resume.id
+                ATSAnalysis.resume_id == resume.id
             )
             .first()
         )
@@ -850,8 +813,7 @@ def get_resume_analysis(
             )
 
         # --------------------------------------------------
-        # Convert section scores JSON
-        # back to dictionary
+        # Convert JSON safely
         # --------------------------------------------------
 
         try:
@@ -864,7 +826,17 @@ def get_resume_analysis(
                 else {}
             )
 
-        except Exception:
+        except (
+            json.JSONDecodeError,
+            TypeError
+        ):
+
+            section_scores = {}
+
+        if not isinstance(
+            section_scores,
+            dict
+        ):
 
             section_scores = {}
 
@@ -904,21 +876,18 @@ def get_resume_analysis(
         }
 
     except HTTPException:
-
         raise
 
     except Exception as e:
 
         print(
             "ATS analysis retrieval error:",
-            e
+            repr(e)
         )
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Unable to retrieve ATS analysis."
-            )
+            detail="Unable to retrieve ATS analysis."
         )
 
 
@@ -948,9 +917,7 @@ def match_resume(
 
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Please provide a job description."
-            )
+            detail="Please provide a job description."
         )
 
     job_description = (
@@ -977,29 +944,35 @@ def match_resume(
             job_description
         )
 
+        print(
+            "JD Skills:",
+            jd_skills
+        )
+
     except Exception as e:
 
         print(
             "Job description skill extraction error:",
-            e
+            repr(e)
         )
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Unable to analyze the job description."
-            )
+            detail="Unable to analyze the job description."
         )
 
     # --------------------------------------------------
-    # 3. Get current user's latest analyzed resume skills from DB
+    # 3. Get latest analyzed resume
     # --------------------------------------------------
 
     try:
 
         latest_resume = (
             db.query(Resume)
-            .join(ATSAnalysis, Resume.id == ATSAnalysis.resume_id)
+            .join(
+                ATSAnalysis,
+                Resume.id == ATSAnalysis.resume_id
+            )
             .filter(
                 Resume.user_id == current_user.id
             )
@@ -1009,7 +982,7 @@ def match_resume(
             .first()
         )
 
-        if not latest_resume or not latest_resume.ats_analysis:
+        if not latest_resume:
 
             raise HTTPException(
                 status_code=400,
@@ -1020,41 +993,141 @@ def match_resume(
                 )
             )
 
-        analysis_data = (
-            json.loads(
-                latest_resume.ats_analysis.section_scores
+        # --------------------------------------------------
+        # Get ATS analysis
+        # --------------------------------------------------
+
+        analysis = (
+            db.query(ATSAnalysis)
+            .filter(
+                ATSAnalysis.resume_id == latest_resume.id
             )
-            if latest_resume.ats_analysis.section_scores
-            else {}
+            .first()
         )
 
-        resume_skills = (
-            analysis_data.get("skills", {}).get("skills_list", [])
+        if not analysis:
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "No ATS analysis was found for "
+                    "your latest resume."
+                )
+            )
+
+        # --------------------------------------------------
+        # Read stored section scores
+        # --------------------------------------------------
+
+        try:
+
+            analysis_data = (
+                json.loads(
+                    analysis.section_scores
+                )
+                if analysis.section_scores
+                else {}
+            )
+
+        except (
+            json.JSONDecodeError,
+            TypeError
+        ):
+
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Stored resume analysis data is invalid. "
+                    "Please upload and analyze your resume again."
+                )
+            )
+
+        if not isinstance(
+            analysis_data,
+            dict
+        ):
+
+            analysis_data = {}
+
+        # --------------------------------------------------
+        # Extract skills from ATS analysis
+        # --------------------------------------------------
+
+        skills_section = analysis_data.get(
+            "skills",
+            {}
         )
 
-        if not resume_skills and "skills" in analysis_data and isinstance(analysis_data["skills"], list):
-            resume_skills = analysis_data["skills"]
+        if isinstance(
+            skills_section,
+            dict
+        ):
+
+            resume_skills = skills_section.get(
+                "skills_list",
+                []
+            )
+
+        elif isinstance(
+            skills_section,
+            list
+        ):
+
+            resume_skills = skills_section
+
+        else:
+
+            resume_skills = []
+
+        # --------------------------------------------------
+        # Normalize resume skills
+        # --------------------------------------------------
+
+        if not isinstance(
+            resume_skills,
+            list
+        ):
+
+            resume_skills = []
+
+        resume_skills = [
+            str(skill).strip()
+            for skill in resume_skills
+            if str(skill).strip()
+        ]
+
+        print(
+            "Current User ID:",
+            current_user.id
+        )
+
+        print(
+            "Latest Resume ID:",
+            latest_resume.id
+        )
+
+        print(
+            "Resume Skills:",
+            resume_skills
+        )
 
     except HTTPException:
-
         raise
 
     except Exception as e:
 
         print(
             "Resume skill retrieval error:",
-            e
+            repr(e)
         )
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Unable to retrieve your resume skills."
-            )
+            detail="Unable to retrieve your resume skills."
         )
 
     # --------------------------------------------------
-    # 4. Make sure resume exists
+    # 4. Validate resume skills
     # --------------------------------------------------
 
     if not resume_skills:
@@ -1062,14 +1135,13 @@ def match_resume(
         raise HTTPException(
             status_code=400,
             detail=(
-                "No analyzed resume was found. "
-                "Please upload and analyze your "
-                "resume first."
+                "No skills were found in your analyzed resume. "
+                "Please upload and analyze your resume again."
             )
         )
 
     # --------------------------------------------------
-    # 5. Make sure JD contains recognizable skills
+    # 5. Validate JD skills
     # --------------------------------------------------
 
     if not jd_skills:
@@ -1083,26 +1155,7 @@ def match_resume(
         )
 
     # --------------------------------------------------
-    # 6. Debug information
-    # --------------------------------------------------
-
-    print(
-        "Current User ID:",
-        current_user.id
-    )
-
-    print(
-        "JD Skills:",
-        jd_skills
-    )
-
-    print(
-        "Resume Skills:",
-        resume_skills
-    )
-
-    # --------------------------------------------------
-    # 7. Calculate job match
+    # 6. Calculate job match
     # --------------------------------------------------
 
     try:
@@ -1116,28 +1169,29 @@ def match_resume(
 
         print(
             "Job matching calculation error:",
-            e
+            repr(e)
         )
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Unable to calculate the job match."
-            )
+            detail="Unable to calculate the job match."
         )
 
     # --------------------------------------------------
-    # 8. Add metadata
+    # 7. Add metadata
     # --------------------------------------------------
 
     result["user_id"] = current_user.id
+
+    result["resume_id"] = latest_resume.id
 
     result["job_description_skills"] = sorted(
         jd_skills
     )
 
     # --------------------------------------------------
-    # 9. Return result
+    # 8. Return result
     # --------------------------------------------------
 
     return result
+

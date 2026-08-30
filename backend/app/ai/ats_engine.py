@@ -1,5 +1,11 @@
 import re
 
+from app.ai.skill_extractor import normalize_skill
+
+
+# ======================================================
+# SKILL NORMALIZATION
+# ======================================================
 
 def normalize_skills(skills):
     """
@@ -9,18 +15,8 @@ def normalize_skills(skills):
     normalized = []
     seen = set()
 
-    aliases = {
-        "html5": "HTML",
-        "html": "HTML",
-        "css3": "CSS",
-        "css": "CSS",
-        "react": "React.js",
-        "react.js": "React.js",
-        "rest api": "REST APIs",
-        "rest apis": "REST APIs",
-        "restful api": "REST APIs",
-        "restful apis": "REST APIs",
-    }
+    if not isinstance(skills, list):
+        return normalized
 
     for skill in skills:
 
@@ -29,27 +25,39 @@ def normalize_skills(skills):
         if not skill:
             continue
 
-        key = skill.lower().strip()
-
-        cleaned = aliases.get(key, skill)
+        cleaned = normalize_skill(skill)
 
         normalized_key = cleaned.lower()
 
         if normalized_key not in seen:
+
             seen.add(normalized_key)
+
             normalized.append(cleaned)
 
     return normalized
 
 
+# ======================================================
+# SAFE SKILL MATCHING
+# ======================================================
+
 def contains_skill(skill_text, skill):
     """
     Safely check whether a skill exists.
+
     Prevents single-letter skills such as 'C'
     from matching random words.
     """
 
-    pattern = r"(?<![a-zA-Z0-9+#])" + re.escape(skill) + r"(?![a-zA-Z0-9+#])"
+    if not skill_text or not skill:
+        return False
+
+    pattern = (
+        r"(?<![a-zA-Z0-9+#])"
+        + re.escape(skill)
+        + r"(?![a-zA-Z0-9+#])"
+    )
 
     return re.search(
         pattern,
@@ -58,20 +66,26 @@ def contains_skill(skill_text, skill):
     ) is not None
 
 
-def calculate_section_scores(data):
+# ======================================================
+# ATS SCORING ENGINE
+# ======================================================
 
+def calculate_section_scores(data):
     """
     ResumeIQ ATS Scoring Engine
 
     Total = 100
 
-    Contact        10
-    Education      15
-    Skills         20
-    Projects       25
-    Experience     20
-    Certifications 10
+    Contact          10
+    Education        15
+    Skills           20
+    Projects         25
+    Experience       20
+    Certifications   10
     """
+
+    if not isinstance(data, dict):
+        data = {}
 
     candidate = data.get("candidate") or {}
     education = data.get("education") or []
@@ -80,9 +94,9 @@ def calculate_section_scores(data):
     experience = data.get("experience") or []
     certifications = data.get("certifications") or []
 
-    # =========================================================
+    # ==================================================
     # CONTACT - 10
-    # =========================================================
+    # ==================================================
 
     contact_score = 0
     contact_strengths = []
@@ -90,11 +104,15 @@ def calculate_section_scores(data):
 
     # Name - 2
     if candidate.get("name"):
+
         contact_score += 2
+
         contact_strengths.append(
             "Name is clearly provided."
         )
+
     else:
+
         contact_improvements.append(
             "Add your full name."
         )
@@ -108,16 +126,23 @@ def calculate_section_scores(data):
         r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
         email
     ):
+
         contact_score += 2
+
         contact_strengths.append(
             "Professional email address is provided."
         )
+
     elif email:
+
         contact_score += 1
+
         contact_improvements.append(
             "Use a valid professional email address."
         )
+
     else:
+
         contact_improvements.append(
             "Add a professional email address."
         )
@@ -136,28 +161,38 @@ def calculate_section_scores(data):
         )
 
         if len(digits) >= 10:
+
             contact_score += 2
+
             contact_strengths.append(
                 "Phone number is provided."
             )
+
         else:
+
             contact_score += 1
+
             contact_improvements.append(
                 "Check that your phone number is complete."
             )
 
     else:
+
         contact_improvements.append(
             "Add a phone number."
         )
 
     # LinkedIn - 2
     if candidate.get("linkedin"):
+
         contact_score += 2
+
         contact_strengths.append(
             "LinkedIn profile is included."
         )
+
     else:
+
         contact_improvements.append(
             "Add your LinkedIn profile URL."
         )
@@ -167,18 +202,22 @@ def calculate_section_scores(data):
         candidate.get("github")
         or candidate.get("portfolio")
     ):
+
         contact_score += 2
+
         contact_strengths.append(
             "GitHub or portfolio link is included."
         )
+
     else:
+
         contact_improvements.append(
             "Add a GitHub or portfolio link."
         )
 
-    # =========================================================
+    # ==================================================
     # EDUCATION - 15
-    # =========================================================
+    # ==================================================
 
     education_score = 0
     education_strengths = []
@@ -282,9 +321,9 @@ def calculate_section_scores(data):
         15
     )
 
-    # =========================================================
+    # ==================================================
     # SKILLS - 20
-    # =========================================================
+    # ==================================================
 
     skills_score = 0
     skills_strengths = []
@@ -335,53 +374,53 @@ def calculate_section_scores(data):
 
     skill_text = " ".join(
         normalized_skills
-    ).lower()
+    )
 
     programming = [
-        "python",
-        "java",
-        "javascript",
-        "typescript",
-        "c",
-        "c++",
-        "c#",
-        "go",
-        "rust",
-        "kotlin"
+        "Python",
+        "Java",
+        "JavaScript",
+        "TypeScript",
+        "C",
+        "C++",
+        "C#",
+        "Go",
+        "Rust",
+        "Kotlin"
     ]
 
     frameworks = [
-        "react",
-        "react.js",
-        "angular",
-        "vue",
-        "spring",
-        "spring boot",
-        "django",
-        "flask",
-        "fastapi",
-        "node",
-        "express"
+        "React",
+        "React.js",
+        "Angular",
+        "Vue",
+        "Spring",
+        "Spring Boot",
+        "Django",
+        "Flask",
+        "FastAPI",
+        "Node",
+        "Node.js",
+        "Express"
     ]
 
     databases = [
-        "mysql",
-        "postgresql",
-        "postgres",
-        "mongodb",
-        "oracle",
-        "sql",
-        "redis"
+        "MySQL",
+        "PostgreSQL",
+        "MongoDB",
+        "Oracle",
+        "SQL",
+        "Redis"
     ]
 
     tools = [
-        "git",
-        "github",
-        "docker",
-        "aws",
-        "azure",
-        "gcp",
-        "linux"
+        "Git",
+        "GitHub",
+        "Docker",
+        "AWS",
+        "Azure",
+        "GCP",
+        "Linux"
     ]
 
     programming_found = any(
@@ -434,9 +473,9 @@ def calculate_section_scores(data):
         20
     )
 
-    # =========================================================
+    # ==================================================
     # PROJECTS - 25
-    # =========================================================
+    # ==================================================
 
     projects_score = 0
     project_strengths = []
@@ -636,9 +675,9 @@ def calculate_section_scores(data):
         25
     )
 
-    # =========================================================
+    # ==================================================
     # EXPERIENCE - 20
-    # =========================================================
+    # ==================================================
 
     experience_score = 0
     experience_strengths = []
@@ -736,9 +775,9 @@ def calculate_section_scores(data):
         20
     )
 
-    # =========================================================
+    # ==================================================
     # CERTIFICATIONS - 10
-    # =========================================================
+    # ==================================================
 
     certifications_score = 0
     certification_strengths = []
@@ -813,9 +852,9 @@ def calculate_section_scores(data):
         10
     )
 
-    # =========================================================
+    # ==================================================
     # OVERALL SCORE
-    # =========================================================
+    # ==================================================
 
     overall = (
         contact_score
@@ -826,9 +865,18 @@ def calculate_section_scores(data):
         + certifications_score
     )
 
-    # =========================================================
+    # Ensure integer score from 0-100
+    overall = max(
+        0,
+        min(
+            int(round(overall)),
+            100
+        )
+    )
+
+    # ==================================================
     # GLOBAL FEEDBACK
-    # =========================================================
+    # ==================================================
 
     all_strengths = (
         contact_strengths
@@ -856,9 +904,9 @@ def calculate_section_scores(data):
         dict.fromkeys(all_improvements)
     )
 
-    # =========================================================
+    # ==================================================
     # RETURN
-    # =========================================================
+    # ==================================================
 
     return {
 
@@ -867,63 +915,90 @@ def calculate_section_scores(data):
         "section_scores": {
 
             "contact": {
+
                 "score": contact_score,
                 "out_of": 10,
+
                 "percentage": round(
                     (contact_score / 10) * 100
                 ),
+
                 "strengths": contact_strengths,
+
                 "improvements": contact_improvements
             },
 
             "education": {
+
                 "score": education_score,
                 "out_of": 15,
+
                 "percentage": round(
                     (education_score / 15) * 100
                 ),
+
                 "strengths": education_strengths,
+
                 "improvements": education_improvements
             },
 
             "skills": {
+
                 "score": skills_score,
                 "out_of": 20,
+
                 "percentage": round(
                     (skills_score / 20) * 100
                 ),
+
                 "strengths": skills_strengths,
+
                 "improvements": skills_improvements,
+
+                # IMPORTANT:
+                # Used by /job_match
                 "skills_list": normalized_skills
             },
 
             "projects": {
+
                 "score": projects_score,
                 "out_of": 25,
+
                 "percentage": round(
                     (projects_score / 25) * 100
                 ),
+
                 "strengths": project_strengths,
+
                 "improvements": project_improvements
             },
 
             "experience": {
+
                 "score": experience_score,
                 "out_of": 20,
+
                 "percentage": round(
                     (experience_score / 20) * 100
                 ),
+
                 "strengths": experience_strengths,
+
                 "improvements": experience_improvements
             },
 
             "certifications": {
+
                 "score": certifications_score,
                 "out_of": 10,
+
                 "percentage": round(
                     (certifications_score / 10) * 100
                 ),
+
                 "strengths": certification_strengths,
+
                 "improvements": certification_improvements
             }
         },
@@ -932,5 +1007,7 @@ def calculate_section_scores(data):
 
         "improvements": improvements[:8],
 
+        # Also expose normalized skills directly
+        # for easier backend/frontend usage
         "normalized_skills": normalized_skills
     }

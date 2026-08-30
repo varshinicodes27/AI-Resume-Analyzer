@@ -156,16 +156,25 @@ function App() {
   // ================= JOB MATCHING =================
 
   const handleJobMatch = async () => {
-    if (!jobDescription.trim()) {
+    const trimmedJd = jobDescription.trim();
+
+    if (!trimmedJd) {
       setJobMatchError(
         "Please paste a job description first."
       );
       return;
     }
 
+    if (trimmedJd.length < 20) {
+      setJobMatchError(
+        "Job description is too short. Please provide at least 20 characters."
+      );
+      return;
+    }
+
     if (!analysisData) {
       setJobMatchError(
-        "Please analyze your resume first."
+        "Please upload and analyze your resume first."
       );
       return;
     }
@@ -191,7 +200,7 @@ function App() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            job_description: jobDescription,
+            job_description: trimmedJd,
           }),
         }
       );
@@ -204,10 +213,16 @@ function App() {
       const data = await response.json();
 
       if (!response.ok) {
+        if (response.status === 500) {
+          throw new Error(
+            "Unable to analyze the job description right now. Please try again."
+          );
+        }
+
         throw new Error(
           data?.detail ||
             data?.message ||
-            "Job matching failed."
+            "Job matching failed. Please check the job description."
         );
       }
 
@@ -219,7 +234,7 @@ function App() {
 
       setJobMatchError(
         err.message ||
-          "Something went wrong while matching the job."
+          "Unable to analyze the job description right now. Please try again."
       );
     } finally {
       setIsMatching(false);
@@ -345,6 +360,16 @@ function App() {
       0
   );
 
+  const matchStrength =
+    jobMatchData?.match_strength ||
+    (matchPercentage >= 85
+      ? "Excellent Match"
+      : matchPercentage >= 70
+      ? "Strong Match"
+      : matchPercentage >= 50
+      ? "Moderate Match"
+      : "Low Match");
+
   const matchedSkills = Array.isArray(
     jobMatchData?.matched_skills
   )
@@ -356,6 +381,21 @@ function App() {
   )
     ? jobMatchData.missing_skills
     : [];
+
+  const jobDescriptionSkills = Array.isArray(
+    jobMatchData?.job_description_skills
+  )
+    ? jobMatchData.job_description_skills
+    : [];
+
+  const resumeSuggestions = Array.isArray(
+    jobMatchData?.resume_suggestions
+  )
+    ? jobMatchData.resume_suggestions
+    : [];
+
+  const matchRecommendation =
+    jobMatchData?.recommendation || "";
 
   // =========================================================
   // AUTH SCREEN
@@ -1093,41 +1133,68 @@ function App() {
 
               <textarea
                 className="job-description-input"
-                placeholder="Paste the complete job description here..."
+                placeholder="Paste the complete job description here (minimum 20 characters, e.g. role overview, responsibilities, required technical skills)..."
                 value={jobDescription}
                 onChange={(event) =>
                   setJobDescription(
                     event.target.value
                   )
                 }
-                rows={8}
+                rows={7}
+                disabled={isMatching}
               />
 
+              <div className="job-input-footer">
+                <div className="job-char-counter">
+                  <span>{jobDescription.length} characters</span>
+                  {jobDescription.trim().length > 0 && jobDescription.trim().length < 20 ? (
+                    <span className="char-warning"> • Minimum 20 characters required</span>
+                  ) : jobDescription.trim().length >= 20 ? (
+                    <span className="char-ready"> • Ready to analyze</span>
+                  ) : null}
+                </div>
+
+                {jobDescription && (
+                  <button
+                    type="button"
+                    className="clear-jd-btn"
+                    onClick={() => {
+                      setJobDescription("");
+                      setJobMatchError("");
+                    }}
+                    disabled={isMatching}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
               {jobMatchError && (
-                <div className="error-message">
-                  ⚠ {jobMatchError}
+                <div className="job-match-error-alert">
+                  <span className="alert-icon">⚠</span>
+                  <span>{jobMatchError}</span>
                 </div>
               )}
 
-              <button
-                className="primary-button"
-                onClick={handleJobMatch}
-                disabled={isMatching}
-              >
-
-                {isMatching ? (
-                  <>
-                    <span className="spinner"></span>
-                    Matching Job...
-                  </>
-                ) : (
-                  <>
-                    Check Job Match
-                    <span>→</span>
-                  </>
-                )}
-
-              </button>
+              <div className="job-matcher-actions">
+                <button
+                  className="primary-button job-match-submit-btn"
+                  onClick={handleJobMatch}
+                  disabled={isMatching || jobDescription.trim().length < 20}
+                >
+                  {isMatching ? (
+                    <>
+                      <span className="spinner"></span>
+                      Analyzing Job Match...
+                    </>
+                  ) : (
+                    <>
+                      Analyze Job Match
+                      <span>→</span>
+                    </>
+                  )}
+                </button>
+              </div>
 
             </div>
 
@@ -1135,133 +1202,189 @@ function App() {
 
               <div className="job-match-result">
 
-                <div className="job-match-score-card">
+                {/* OVERVIEW SCORE CARD */}
+                <div className="job-match-overview-card">
 
-                  <div className="score-card-label">
-                    JOB MATCH SCORE
-                  </div>
-
-                  <div
-                    className={
-                      "ats-score " +
-                      getScoreClass(
-                        matchPercentage
-                      )
-                    }
-                  >
-                    {matchPercentage}
-                    <small>/100</small>
-                  </div>
-
-                  <div className="score-progress">
+                  <div className="job-match-score-pill-container">
+                    <div className="score-card-label">
+                      JOB MATCH SCORE
+                    </div>
 
                     <div
-                      className="score-progress-fill"
-                      style={{
-                        width:
-                          Math.min(
-                            Math.max(
-                              matchPercentage,
-                              0
-                            ),
-                            100
-                          ) + "%",
-                      }}
-                    ></div>
+                      className={
+                        "ats-score " +
+                        getScoreClass(
+                          matchPercentage
+                        )
+                      }
+                    >
+                      {matchPercentage}
+                      <small>/100</small>
+                    </div>
 
+                    <div className={`match-strength-badge ${getScoreClass(matchPercentage)}`}>
+                      {matchStrength}
+                    </div>
                   </div>
 
-                  <p>
-                    {matchPercentage >= 80
-                      ? "Excellent match for this role"
-                      : matchPercentage >= 60
-                      ? "Good match with some skill gaps"
-                      : "Consider improving your skill alignment"}
-                  </p>
+                  <div className="job-match-progress-container">
+                    <div className="job-match-progress-header">
+                      <span className="match-summary-text">
+                        <strong>{matchedSkills.length}</strong> of{" "}
+                        <strong>
+                          {jobDescriptionSkills.length ||
+                            matchedSkills.length + missingSkills.length}
+                        </strong>{" "}
+                        required skills matched
+                      </span>
+                      <span className="match-percentage-text">
+                        {matchPercentage}% Match
+                      </span>
+                    </div>
+
+                    <div className="score-progress">
+                      <div
+                        className={`score-progress-fill ${getScoreClass(matchPercentage)}`}
+                        style={{
+                          width:
+                            Math.min(
+                              Math.max(
+                                matchPercentage,
+                                0
+                              ),
+                              100
+                            ) + "%",
+                        }}
+                      ></div>
+                    </div>
+
+                    {matchRecommendation && (
+                      <div className="job-match-recommendation-box">
+                        <span className="recommendation-icon">💡</span>
+                        <p>{matchRecommendation}</p>
+                      </div>
+                    )}
+                  </div>
 
                 </div>
 
-                <div className="job-match-skills">
+                {/* SKILL COMPARISON COLUMNS */}
+                <div className="job-match-columns-grid">
 
-                  <div className="match-column">
+                  {/* MATCHED SKILLS */}
+                  <div className="match-column matched-column-card">
 
-                    <h3>
-                      ✓ Matched Skills
-                    </h3>
+                    <div className="column-header">
+                      <span className="column-dot matched-dot"></span>
+                      <h3>Matched Skills</h3>
+                      <span className="column-badge matched-badge">
+                        {matchedSkills.length}
+                      </span>
+                    </div>
 
                     {matchedSkills.length > 0 ? (
-
-                      <div className="skills-container">
-
+                      <div className="skills-container matched-container">
                         {matchedSkills.map(
                           (skill, index) => (
-
                             <span
-                              className="skill-pill"
+                              className="skill-pill matched-skill-pill"
                               key={
                                 "matched-" +
                                 index
                               }
                             >
-                              {skill}
+                              <span className="pill-icon">✓</span> {skill}
                             </span>
-
                           )
                         )}
-
                       </div>
-
                     ) : (
-
                       <div className="empty-state">
-                        No matching skills
-                        detected.
+                        No matching skills detected in the current resume.
                       </div>
-
                     )}
 
                   </div>
 
-                  <div className="match-column">
+                  {/* MISSING SKILLS */}
+                  <div className="match-column missing-column-card">
 
-                    <h3>
-                      → Missing Skills
-                    </h3>
+                    <div className="column-header">
+                      <span className="column-dot missing-dot"></span>
+                      <h3>Missing Skills</h3>
+                      <span className="column-badge missing-badge">
+                        {missingSkills.length}
+                      </span>
+                    </div>
 
                     {missingSkills.length > 0 ? (
-
-                      <div className="skills-container">
-
+                      <div className="skills-container missing-container">
                         {missingSkills.map(
                           (skill, index) => (
-
                             <span
-                              className="skill-pill missing-skill"
+                              className="skill-pill missing-skill-pill"
                               key={
                                 "missing-" +
                                 index
                               }
                             >
-                              {skill}
+                              <span className="pill-icon">+</span> {skill}
                             </span>
-
                           )
                         )}
-
                       </div>
-
                     ) : (
-
                       <div className="empty-state">
-                        No major skill gaps
-                        detected.
+                        No major skill gaps detected for this role!
                       </div>
-
                     )}
 
                   </div>
 
+                  {/* DETECTED JOB REQUIREMENTS */}
+                  {jobDescriptionSkills.length > 0 && (
+                    <div className="match-column jd-column-card">
+
+                      <div className="column-header">
+                        <span className="column-dot jd-dot"></span>
+                        <h3>Job Requirements</h3>
+                        <span className="column-badge jd-badge">
+                          {jobDescriptionSkills.length}
+                        </span>
+                      </div>
+
+                      <div className="skills-container jd-container">
+                        {jobDescriptionSkills.map(
+                          (skill, index) => (
+                            <span
+                              className="skill-pill jd-skill-pill"
+                              key={
+                                "jd-" +
+                                index
+                              }
+                            >
+                              {skill}
+                            </span>
+                          )
+                        )}
+                      </div>
+
+                    </div>
+                  )}
+
                 </div>
+
+                {/* RESUME SUGGESTIONS */}
+                {resumeSuggestions.length > 0 && (
+                  <div className="job-match-suggestions-card">
+                    <h4>📌 Recommendations to Improve Alignment</h4>
+                    <ul>
+                      {resumeSuggestions.map((suggestion, index) => (
+                        <li key={"suggestion-" + index}>{suggestion}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
               </div>
 

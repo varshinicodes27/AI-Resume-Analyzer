@@ -1,349 +1,162 @@
-import re
+
+from app.ai.skill_extractor import (
+    normalize_skill,
+    extract_jd_skills
+)
 
 
-# ==========================================================
-# SKILL DATABASE
-# ==========================================================
-
-SKILLS_DATABASE = [
-    "python",
-    "java",
-    "c++",
-    "c",
-    "html",
-    "css",
-    "javascript",
-    "react",
-    "react.js",
-    "node.js",
-    "node",
-    "spring boot",
-    "spring",
-    "hibernate",
-    "sql",
-    "mysql",
-    "mongodb",
-    "fastapi",
-    "docker",
-    "aws",
-    "git",
-    "github",
-    "rest api",
-    "jpa",
-    "maven",
-    "typescript",
-    "angular",
-    "kotlin",
-    "redis",
-    "postgresql",
-    "azure",
-    "kubernetes"
-]
-
-
-# ==========================================================
-# SKILL ALIASES
-# ==========================================================
-SKILL_ALIASES = {
-
-    # ======================================================
-    # PROGRAMMING LANGUAGES
-    # ======================================================
-
-    "py": "python",
-
-    "js": "javascript",
-    "jscript": "javascript",
-
-    "ts": "typescript",
-
-    "c plus plus": "c++",
-    "cpp": "c++",
-
-    # ======================================================
-    # HTML / CSS
-    # ======================================================
-
-    "html5": "html",
-
-    "css3": "css",
-
-    # ======================================================
-    # REACT
-    # ======================================================
-
-    "react.js": "react",
-    "reactjs": "react",
-    "react js": "react",
-
-    # ======================================================
-    # NODE
-    # ======================================================
-
-    "node.js": "node",
-    "nodejs": "node",
-    "node js": "node",
-
-    # ======================================================
-    # SPRING
-    # ======================================================
-
-    "springboot": "spring boot",
-    "spring-boot": "spring boot",
-    "spring boot framework": "spring boot",
-
-    # ======================================================
-    # REST API
-    # ======================================================
-
-    "rest": "rest api",
-    "rest api": "rest api",
-    "rest apis": "rest api",
-    "restful api": "rest api",
-    "restful apis": "rest api",
-    "restful web services": "rest api",
-    "rest api development": "rest api",
-
-    # ======================================================
-    # DATABASE
-    # ======================================================
-
-    "mysql database": "mysql",
-    "mysql db": "mysql",
-
-    "postgres": "postgresql",
-    "postgres db": "postgresql",
-    "postgresql database": "postgresql",
-
-    # ======================================================
-    # VERSION CONTROL
-    # ======================================================
-
-    "git version control": "git",
-    "github repository": "github",
-
-    # ======================================================
-    # JPA
-    # ======================================================
-
-    "java persistence api": "jpa",
-
-    # ======================================================
-    # OBJECT ORIENTED PROGRAMMING
-    # ======================================================
-
-    "object oriented programming": "oop",
-    "object-oriented programming": "oop",
-
-    # ======================================================
-    # DATA STRUCTURES
-    # ======================================================
-
-    "data structures and algorithms": "dsa",
-    "data structures & algorithms": "dsa",
-
-}
-
-
-# ==========================================================
-# NORMALIZE SKILL
-# ==========================================================
-
-def normalize_skill(skill):
-
-    skill = str(skill).lower().strip()
-
-    # Replace common punctuation variations
-    skill = skill.replace("_", " ")
-    skill = skill.replace("/", " ")
-
-    # Normalize hyphens
-    skill = skill.replace("-", " ")
-
-    # Remove unnecessary spaces
-    skill = re.sub(r"\s+", " ", skill).strip()
-
-    # Apply aliases
-    skill = SKILL_ALIASES.get(
-        skill,
-        skill
-    )
-
-    return skill
-
-# ==========================================================
-# EXTRACT SKILLS FROM JOB DESCRIPTION
-# ==========================================================
-
-def extract_jd_skills(job_description):
-
-    if not job_description:
-        return []
-
-    text = job_description.lower()
-
-    found_skills = []
-
-    for skill in SKILLS_DATABASE:
-
-        # Special handling for C
-        # Prevent random single-letter matches.
-        if skill == "c":
-              pattern = r"(?<![a-z0-9+#])c(?![a-z0-9+#])"
-        else:
-            pattern = (
-                r"(?<!\w)"
-                + re.escape(skill)
-                + r"(?!\w)"
-            )
-
-        if re.search(pattern, text):
-
-            normalized = normalize_skill(skill)
-
-            if normalized not in found_skills:
-                found_skills.append(normalized)
-
-    return found_skills
-
-
-# ==========================================================
+# ============================================================
 # CALCULATE JOB MATCH
-# ==========================================================
+# ============================================================
 
 def calculate_job_match(resume_skills, jd_skills):
+    """
+    Calculate deterministic job-description skill match percentage.
 
-    # ------------------------------------------------------
-    # NORMALIZE RESUME SKILLS
-    # ------------------------------------------------------
+    Policy:
+    - Accurate, canonical equivalence matching (e.g. 'Core Java' == 'Java', 'ReactJS' == 'React.js').
+    - Strictly avoids false cross-technology inflation:
+      - Spring != Spring Boot
+      - Java != JavaScript
+      - C != C++ / C#
+      - React.js != React Native
+      - AWS != Azure
+      - Docker != Kubernetes
+    """
 
-    resume_skills = {
+    # --------------------------------------------------------
+    # 1. NORMALIZE RESUME SKILLS
+    # --------------------------------------------------------
+
+    resume_set = {
         normalize_skill(skill)
         for skill in resume_skills
         if str(skill).strip()
     }
 
-    # ------------------------------------------------------
-    # NORMALIZE JD SKILLS
-    # ------------------------------------------------------
+    # --------------------------------------------------------
+    # 2. NORMALIZE JD SKILLS
+    # --------------------------------------------------------
 
-    jd_skills = {
+    jd_set = {
         normalize_skill(skill)
         for skill in jd_skills
         if str(skill).strip()
     }
 
-    # Remove empty values
-    resume_skills.discard("")
-    jd_skills.discard("")
+    resume_set.discard("")
+    jd_set.discard("")
 
-    # ------------------------------------------------------
-    # MATCHING
-    # ------------------------------------------------------
+    # --------------------------------------------------------
+    # 3. EXACT CANONICAL MATCHING
+    # --------------------------------------------------------
 
-    matched = resume_skills.intersection(jd_skills)
+    matched = jd_set.intersection(resume_set)
+    missing = jd_set.difference(resume_set)
 
-    missing = jd_skills.difference(resume_skills)
+    total_job_skills = len(jd_set)
+    matched_count = len(matched)
+    missing_count = len(missing)
 
-    # ------------------------------------------------------
-    # SCORE
-    # ------------------------------------------------------
+    # --------------------------------------------------------
+    # 4. SCORE CALCULATION
+    # --------------------------------------------------------
 
-    if not jd_skills:
-
+    if not jd_set:
         score = 0
-
     else:
-
         score = round(
-            (len(matched) / len(jd_skills)) * 100
+            (matched_count / total_job_skills) * 100
         )
 
-    # ------------------------------------------------------
-    # MATCH STRENGTH
-    # ------------------------------------------------------
+    # --------------------------------------------------------
+    # 5. MATCH STRENGTH THRESHOLDS
+    # 90-100 -> Excellent Match
+    # 75-89  -> Strong Match
+    # 50-74  -> Moderate Match
+    # 25-49  -> Weak Match
+    # 0-24   -> Low Match
+    # --------------------------------------------------------
 
-    if score >= 85:
-
+    if score >= 90:
         match_strength = "Excellent Match"
-
-    elif score >= 70:
-
+    elif score >= 75:
         match_strength = "Strong Match"
-
     elif score >= 50:
-
         match_strength = "Moderate Match"
-
+    elif score >= 25:
+        match_strength = "Weak Match"
     else:
-
         match_strength = "Low Match"
 
-    # ------------------------------------------------------
-    # RECOMMENDED SKILLS
-    # ------------------------------------------------------
+    # --------------------------------------------------------
+    # 6. SORTED CANONICAL DISPLAY
+    # --------------------------------------------------------
 
-    recommended_skills = sorted(
-        skill.title()
-        for skill in missing
+    matched_skills = sorted(
+        matched
     )
 
-    # ------------------------------------------------------
-    # SUGGESTIONS
-    # ------------------------------------------------------
+    missing_skills = sorted(
+        missing
+    )
+
+    recommended_skills = missing_skills.copy()
+
+    job_description_skills = sorted(
+        jd_set
+    )
+
+    # --------------------------------------------------------
+    # 7. ACTIONABLE SUGGESTIONS
+    # --------------------------------------------------------
 
     suggestions = []
 
     if missing:
-
         suggestions.append(
             "Consider adding relevant missing skills "
-            "to your resume if you genuinely have experience with them."
+            "to your resume only if you genuinely have "
+            "experience with them."
         )
 
     if matched:
-
         suggestions.append(
             "Highlight your matched skills clearly "
-            "in your Skills and Projects sections."
+            "in your Skills, Projects, and Experience sections."
         )
 
-    if score < 70 and jd_skills:
-
+    if score < 75 and jd_set:
         suggestions.append(
             "Tailor your resume toward the important "
             "technical requirements mentioned in the job description."
         )
 
-    if score >= 85:
-
+    if score >= 90:
         suggestions.append(
             "Your technical skill alignment is strong. "
-            "Focus on demonstrating these skills with measurable "
-            "project or experience results."
+            "Focus on demonstrating these skills with "
+            "measurable project or experience results."
         )
 
-    # ------------------------------------------------------
-    # RECOMMENDATION
-    # ------------------------------------------------------
+    # --------------------------------------------------------
+    # 8. RECOMMENDATION
+    # --------------------------------------------------------
 
-    if not jd_skills:
-
+    if not jd_set:
         recommendation = (
             "No supported technical skills were detected "
             "in the job description."
         )
 
-    elif score >= 85:
-
+    elif score >= 90:
         recommendation = (
             "Your resume strongly matches this job. "
             "You have excellent alignment with the detected "
             "technical requirements."
         )
 
-    elif score >= 70:
-
+    elif score >= 75:
         recommendation = (
             "Your resume matches most of the detected job "
             "requirements. Addressing the missing skills "
@@ -351,50 +164,40 @@ def calculate_job_match(resume_skills, jd_skills):
         )
 
     elif score >= 50:
-
         recommendation = (
             "Your resume has a moderate skill overlap with "
             "this job. Consider strengthening the missing "
             "technical areas."
         )
 
-    else:
-
+    elif score >= 25:
         recommendation = (
             "Your resume currently has limited skill overlap "
             "with this job. Review the missing requirements "
             "before applying."
         )
 
-    # ------------------------------------------------------
-    # RETURN
-    # ------------------------------------------------------
+    else:
+        recommendation = (
+            "Your resume has low alignment with the required "
+            "technical skills for this role."
+        )
+
+    # --------------------------------------------------------
+    # 9. RETURN STRUCTURE
+    # --------------------------------------------------------
 
     return {
-
         "match_percentage": score,
-
         "match_strength": match_strength,
-
-        "total_job_skills": len(jd_skills),
-
-        "matched_count": len(matched),
-
-        "missing_count": len(missing),
-
-        "matched_skills": sorted(
-            skill.title()
-            for skill in matched
-        ),
-
-        "missing_skills": sorted(
-            skill.title()
-            for skill in missing
-        ),
-
+        "total_job_skills": total_job_skills,
+        "matched_count": matched_count,
+        "missing_count": missing_count,
+        "matched_skills": matched_skills,
+        "missing_skills": missing_skills,
         "recommended_skills": recommended_skills,
-
+        "job_description_skills": job_description_skills,
         "resume_suggestions": suggestions,
-
         "recommendation": recommendation
     }
+
